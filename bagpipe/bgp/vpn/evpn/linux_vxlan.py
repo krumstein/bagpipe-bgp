@@ -97,7 +97,7 @@ class LinuxVXLANEVIDataplane(VPNInstanceDataplane):
         # Create VXLAN interface
         self._runCommand(
             "ip link add %s type vxlan id %d local %s nolearning proxy %s" %
-            (self.vxlan_if_name, self.instanceLabel,
+            (self.vxlan_if_name, 1002530,
              self.driver.getLocalAddress(), dstPortSpec)
         )
 
@@ -200,7 +200,7 @@ class LinuxVXLANEVIDataplane(VPNInstanceDataplane):
 
         # populate bridge forwarding db
         self._runCommand("bridge fdb replace %s dev %s dst %s vni %s" %
-                         (mac, self.vxlan_if_name, remotePE, vni))
+                         (mac, self.vxlan_if_name, remotePE,1002530 ))
 
         # populate ARP cache
         if ip is not None:
@@ -245,7 +245,7 @@ class LinuxVXLANEVIDataplane(VPNInstanceDataplane):
         # 00:00:00:00:00 usable as default since kernel commit
         # 58e4c767046a35f11a55af6ce946054ddf4a8580 (2013-06-25)
         self._runCommand("bridge fdb append 00:00:00:00:00:00 dev %s dst %s "
-                         "vni %s" % (self.vxlan_if_name, remotePE, vni))
+                         "vni %s" % (self.vxlan_if_name, remotePE, 1002530))
 
         self._fdbDump()
 
@@ -261,7 +261,7 @@ class LinuxVXLANEVIDataplane(VPNInstanceDataplane):
         self._fdbDump()
 
         self._runCommand("bridge fdb delete 00:00:00:00:00:00 dev %s dst %s "
-                         "vni %s" % (self.vxlan_if_name, remotePE, vni))
+                         "vni %s" % (self.vxlan_if_name, remotePE, 1002530))
 
         self._fdbDump()
 
