@@ -143,7 +143,7 @@ class EVI(VPNInstance, LookingGlass):
                                    None,
                                    self.bgpManager.getLocalAddress(),
                                    self.instanceId),
-                etag,
+                877549,
                 self.bgpManager.getLocalAddress()
             )
         )
@@ -174,16 +174,16 @@ class EVI(VPNInstance, LookingGlass):
         assert(prefixLen == 32)
 
         # label parameter ignored, we want the instance label
-        lse = LabelStackEntry(self.instanceLabel, True)
+        lse = LabelStackEntry(1002530, True)
         etag = None
 
         route = Route(
             EVPNMACAdvertisement(
-                RouteDistinguisher(RouteDistinguisher.TYPE_IP_LOC, None,
-                                   self.dataplaneDriver.getLocalAddress(),
-                                   self.instanceId),
+                RouteDistinguisher(RouteDistinguisher.TYPE_AS2_LOC, 65534,
+                                   65534,
+                                   40369),
                 EthernetSegmentIdentifier(),
-                etag,
+                EthernetTag(1002530),
                 MAC(macAddress),
                 lse,
                 ipPrefix
