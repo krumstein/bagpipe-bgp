@@ -236,7 +236,7 @@ class EVPNNLRI(object):
     def _computePackedValue(self):
         raise Exception("Abstract class, cannot compute packedValue")
         
-    def __len__ (self):
+    def __len__(self):
         if self.packedValue is None:
             self._computePackedValue()
         return len(self.packedValue)+2
@@ -271,11 +271,11 @@ class EVPNNLRI(object):
         #subtype
         typeid = ord(data[0])
         data=data[1:]
-        
+         
         #length
         length = ord(data[0]) 
         data=data[1:length+1]
-        
+        #raise Exception("typeid = %s, length = %s %s "%(typeid,length,EVPN_types_to_class[typeid].unpack(data)))
         if typeid in EVPN_types_to_class:
             return EVPN_types_to_class[typeid].unpack(data)
         else:
@@ -370,7 +370,11 @@ class EVPNMACAdvertisement(EVPNNLRI):
         value += self.label.pack()
         
         self.packedValue = value
-        
+    def __len__ (self):
+        if self.packedValue is None:
+            self._computePackedValue()
+        return len(self.packedValue)+2
+ 
     @staticmethod
     def unpack(data):
         
@@ -467,6 +471,10 @@ class EVPNMulticast(EVPNNLRI):
                              pack("B",len(encoded_ip)*8) + 
                              encoded_ip
                             )
+    def __len__ (self):
+        if self.packedValue is None:
+            self._computePackedValue()
+        return len(self.packedValue)+2
         
     @staticmethod
     def unpack(data):
@@ -491,4 +499,141 @@ class EVPNMulticast(EVPNNLRI):
         return EVPNMulticast(rd,etag,ip)
 
 register(EVPNMulticast)
+
+class EVPNPREFIXAdvertisement(EVPNNLRI):
+# ------------ EVPN Prefix Advertisement NLRI ------------
+# As described here:
+# http://tools.ietf.org/html/draft-ietf-bess-evpn-prefix-advertisement-01
+
+# +---------------------------------------+
+# |      RD   (8 octets)                  |
+# +---------------------------------------+
+# |Ethernet Segment Identifier (10 octets)|
+# +---------------------------------------+
+# |  Ethernet Tag ID (4 octets)           |
+# +---------------------------------------+
+# |  IP Prefix Length (1 octet)           |
+# +---------------------------------------+
+# |  IP Prefix (4 or 16 octets)           |
+# +---------------------------------------+
+# |  GW IP Address (4 or 16 octets)       |
+# +---------------------------------------+
+# |  MPLS Label (3 octets)                |
+# +---------------------------------------+
+# total NLRI length is 34 bytes for IPv4 or 58 bytes for IPv6
+
+# ======================================================================= Prefix
+    subtype = 5
+    nickname = "PREFIXAdv"
+    def __init__(self, rd, esi, etag, label, ip, iplen, gwip, packed=None,nexthop=None,action=None,addpath=None):
+        '''
+        rd: a RouteDistinguisher
+        esi: an EthernetSegmentIdentifier
+        etag: an EthernetTag
+        label: a LabelStackEntry
+        ip: an IP address (dotted quad string notation)
+        iplen: prefixlength for ip (defaults to 32)
+        gwip: an IP address (dotted quad string notation)
+        '''
+        self.rd = rd
+        self.esi = esi
+        self.etag = etag
+        self.ip = ip
+        self.iplen = iplen
+        self.gwip = gwip
+        self.label = label
+        self.label = label if label else Labels.NOLABEL    
+        EVPNNLRI.__init__(self, self.__class__.subtype)
+
+    def __str__ (self):
+        desc = "[rd:%s][esi:%s][etag:%s][ip:%s:prefix%s][gwip:%s][label:%s]" % (self.rd, self.esi, self.etag, 
+                                             self.ip, self.iplen, 
+                                             self.gwip,self.label)
+        return "%s:%s" % (EVPNNLRI.__str__(self), desc) 
+    
+    def __cmp__(self,other):
+        if (isinstance(other,self.__class__)
+            and self.rd == other.rd
+            #and self.esi == other.esi  ## must *not* be part of the test
+            and self.etag == other.etag
+            and self.iplen == other.iplen
+            and self.ip == other.ip
+            and self.gwip == other.gwip
+            #and self.label == other.label ## must *not* be part of the test 
+            ):
+            return 0
+        else:
+            return -1
+        
+    def __hash__(self):
+        # esi and label must *not* be part of the hash
+        return hash("%s:%s:%s:%s:%s" % (self.rd,self.etag,self.ip,self.iplen,self.gwip))
+    
+    def _computePackedValue (self):
+        if not self.packedValue:
+            value = "%s%s%s%s%s%s%s" % (
+                self.rd.pack(),
+                self.esi.pack(),
+                self.etag.pack(),
+                chr(self.iplen),
+                socket.inet_pton( socket.AF_INET, self.ip ),#TODO ipv6
+                socket.inet_pton( socket.AF_INET, self.ip ),
+                self.label.pack(),
+            )
+        self.packedValue = value
+        return self.packedValue
+
+    @staticmethod
+    def unpack ( exdata):
+        data = exdata
+
+        # Get the data length to understand if addresses are IPv4 or IPv6
+        datalen = len(data)
+
+        rd = RouteDistinguisher.unpack(data[:8])
+        data = data[8:]
+
+        esi = EthernetSegmentIdentifier.unpack(data[:10])
+        data = data[10:]
+
+        etag = EthernetTag.unpack(data[:4])
+        data = data[4:]
+
+        iplen = ord(data[0])
+        data = data[1:]
+        # if iplen == 0:
+ #            ip = None
+ #            iplen_byte=0
+ #        elif iplen == 4*8:
+ #            ip = socket.inet_ntop( socket.AF_INET, data[:4] )
+ #            iplen_byte=4
+ #        elif iplen == 16*8:
+ #            ip = socket.inet_ntop( socket.AF_INET6, data[:16] )
+ #            iplen_byte=16
+ #
+        if datalen == (26 + 8):  # Using IPv4 addresses
+            ip = socket.inet_ntop( socket.AF_INET, data[:4] )
+            data = data[4:]
+            gwip = socket.inet_ntop( socket.AF_INET, data[:4] )
+            data = data[4:]
+        elif datalen == (26 + 32):  # Using IPv6 addresses
+            ip = socket.inet_ntop( socket.AF_INET6, data[:16] )
+            data = data[16:]
+            gwip = socket.inet_ntop( socket.AF_INET6, data[:16] )
+            data = data[16:]
+        else:
+            raise Notify(3,5,"Data field length is given as %d, but EVPN route currently support only IPv4 or IPv6(34 or 58)" % iplen)
+
+        label = LabelStackEntry.unpack(data[:3])
+
+        return EVPNPREFIXAdvertisement(rd,esi,etag,label,ip,iplen,gwip,exdata)
+        
+    def __len__ (self):
+        if self.packedValue is None:
+            self._computePackedValue()
+        return len(self.packedValue)+2
+ 
+   
+        
+register(EVPNPREFIXAdvertisement)
 
